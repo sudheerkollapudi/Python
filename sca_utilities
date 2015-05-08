@@ -1,0 +1,661 @@
+
+
+#FILE NAME: sca_utilities.py
+
+#AUTHOR: Sudheer Kollapudi
+
+
+
+#PURPOSE: This script contains functions (utilities), which are commonly used over different sca tools.
+#
+
+import re 
+import fileinput
+import sys
+import os
+import csv
+import atexit
+from HTMLParser import HTMLParser
+from htmlentitydefs import name2codepoint
+
+len_metrics = len("             Metrics          Unit    Subprogram    Complexity    DO-178B Level C Statement     ")
+grand_total = "GRAND TOTALS"
+totals ="TOTALS"
+ada_ext= ".2.ada"
+code_coverage="Code Coverage for Unit: "
+new_line="\n"
+star="*"
+of="of"
+comma=","
+cmt_sym="--"
+test_cov_sum="TEST COVERAGE SUMMARY"
+slash="/"
+code_coverage="Code Coverage for Unit: "
+new_line="\n"
+cmt_sym="--"
+test_cov_sum="TEST COVERAGE SUMMARY"
+no_coverage="No Coverage Data Exists"
+
+# create a subclass and override the handler methods
+class MyHTMLParser(HTMLParser):
+
+   def __init__(self):
+      """Initialize and reset this instance."""
+      self.reset()
+      self.Capture_Package = False
+      self.Capture_Line_Number = -1
+      self.Current_Package = ''
+      
+      self.Line_Capture = False
+      self.Line_Hit = False
+      self.Line_Not_Hit = False
+      self.Line_Number = ''
+      self.Line_Text = ''
+      
+      self.Data = ''
+      
+      
+
+   def reset_vars(self):
+      
+      self.Capture_Package = False
+      self.Capture_Line_Number = -1
+      self.Current_Package = ''
+      
+      self.Line_Capture = False
+      self.Line_Hit = False
+      self.Line_Not_Hit = False
+      self.Line_Number = ''
+      self.Line_Text = ''
+      
+      self.Data = ''
+      
+
+   def handle_starttag(self, tag, attrs):
+        
+      if tag == 'strong':
+         self.Capture_Package = True
+         self.Current_Package = ''
+      elif tag == 'span' and attrs != []:
+         
+         self.Line_Capture = True
+         self.Capture_Line_Number = 0
+         self.Line_Number = ''
+         self.Line_Text = ''
+         if attrs[0][1] == 'color:#009900;':
+            self.Line_Hit = True
+         elif attrs[0][1] == 'color:#FF0000;':
+            self.Line_Not_Hit = True
+      else:
+         self.Data = ''
+
+         
+   def handle_endtag(self, tag):
+      
+      if tag == 'strong':
+         self.Capture_Package = False
+      elif tag == 'span':
+         self.Line_Capture = False
+      
+         
+         
+   def handle_data(self, data):
+
+      if self.Capture_Package == True:
+         self.Current_Package = data
+      elif self.Line_Capture == True:
+      
+         if self.Capture_Line_Number < 2:
+            self.Capture_Line_Number += 1
+            self.Line_Number += data + ' '
+         else:
+            self.Line_Text += data + ' '
+      else:
+         self.Data += data +' '
+         
+   #Handle text for various symbols in code
+   def handle_entityref(self, name):
+      if self.Line_Capture == True:
+      
+         c = chr(name2codepoint[name])
+         
+         if c != ' ' and c != '\xa0':
+            self.Line_Text += c + ' '
+      
+         
+   def package_name(self):
+      return self.Current_Package
+      
+   def line_text(self):
+      return self.Line_Text
+      
+   def line_hit(self):
+      return self.Line_Hit
+      
+   def line_not_hit(self):
+      return self.Line_Not_Hit
+      
+   def line_number(self):
+      return self.Line_Number
+
+#end class MyHTMLParser(HTMLParser):
+
+
+def add_modified_sign(new_files_path,sign):
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To add sign to each line for each new difference file .
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE   
+
+   
+   for file in os.listdir(new_files_path):
+      if (file[-8:]=="_new.txt"):
+         for line in fileinput.input([new_files_path+slash+file], inplace=True):
+            sys.stdout.write(sign + line)
+         # for line in fileinput.input([new_files_path+slash+file], inplace=True):   
+         fileinput.close()
+      #if file.endswith(type_of_file):   
+   #for file in os.listdir(new_files_path):
+#end def add_modified_sign(new_files_path,sign):   
+
+
+def get_packages_and_procedures_present_in_html_path(aggr_html_path):
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To get packages and procedure(in dictionary format)in provided aggregate report.
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE   
+   
+   #variable to hold packages and procedures 
+   code_pack_dic={}
+   #get last line of html file
+   html_data=get_file_data_in_lines(aggr_html_path)
+   len_html_data = len(html_data)
+   last_line_data = re.sub("&nbsp;",' ',re.sub('<[^>]+>', ' ', html_data[len_html_data-1]))
+   
+   matrics_data= last_line_data[len_metrics:last_line_data.find(grand_total)].replace(totals,"")
+   matrics_data = matrics_data.split()
+   func_pro=[]
+   code_pack_name=""
+   #loop for each split data
+   for data in matrics_data:
+      if (re.match('\d',data) == None and re.match('\(\d',data) == None and re.match('\/',data) == None):
+         if (data.find(ada_ext) != -1):
+            code_pack_name = data
+            func_pro=[]
+         else:
+            func_pro.append(data)
+            code_pack_dic[code_pack_name]= func_pro
+         #end  if (data.find(ada_ext) != -1):   
+   #end  for data in matrics_data:      
+   #end  for data in matrics_data:         
+   return code_pack_dic
+#def get_packages_and_procedures_present_in_html_path(aggr_html_path):
+
+def get_file_data_in_lines(file_path):
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To read provided file data in lines 
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE      
+   
+   file_poin = open(file_path,"r")
+   file_data=file_poin.readlines()
+   file_poin.close()
+   return file_data
+#def get_file_data_in_lines(file_path):
+
+def get_file_data_as_string(file_path):  
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To read provided file data in string 
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE     
+    
+   file_poin = open(file_path,"r")
+   file_data=file_poin.read()
+   file_poin.close()
+   return file_data
+ #def get_file_data_as_string(file_path):
+ 
+ 
+def get_csv_data(file_path,column_nos,skip_first_row):  
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To get data form specified columns of provided .csv file.
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE     
+   
+   csv_file = open(file_path,'rb')
+   csv_reader = csv.reader(csv_file)
+   #skip first row
+   if skip_first_row==True:
+      csv_reader.next()
+   #end if skip_first_row==True:   
+   csv_data=[]
+   #loop for all rows in provided .csv file.
+   for row in csv_reader:
+      temp=[]
+      if len(column_nos)== 1:
+         csv_data.append(row[column_nos[0]])
+      else:
+         for value in column_nos:
+            temp.append(row[value])
+         #end for value in column_nos:   
+         csv_data.append(temp)
+      #end if len(column_nos)== 1:  
+   #end for row in csv_reader:    
+   csv_file.close()
+      
+   return csv_data
+ #def get_file_data_as_string(file_path):
+ 
+def write_csv_data(file_path,data):  
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To write provided data (list) into .csv file. 
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE      
+   
+   csv_file = open(file_path, 'wb')
+   csv_file_writer = csv.writer(csv_file)
+   csv_file_writer.writerows(data)
+   csv_file.close()
+#def write_csv_data(file_path,data)
+
+def check_file_type(path,file_type):
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To check file type
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE 
+   
+   if not path.endswith(file_type):
+      raise RuntimeError(path+' was not '+ file_type +' type')
+   #if(path[-len(file_type):]==file_type)   
+#def check_file_type(path,file_type):         
+
+def convert_html_to_text(file_path):
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To convert html data into text data
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE    
+   html_data=get_file_data_as_string(file_path)
+   text_data=  re.sub('&gt;', '>', re.sub('&lt;', '<', re.sub("&nbsp;",' ',re.sub('<[^>]+>', ' ',html_data)))) 
+   text_data = unicode(text_data,'latin-1')  
+   return text_data
+#def convert_html_to_text(file_path):   
+   
+   
+def Get_Line_Data(agg_data,pack,pro_no,line_no):
+   
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To get line of code in a file string by referring given package name and procedure no and line no
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE   
+   
+   #this function will get code data of provided line
+   combine_line=str(pro_no).rjust(2)+" "+str(line_no).ljust(1)
+   pack=code_coverage+pack
+   line_data=""
+   if (agg_data.lower().find(pack.lower()) != -1):
+      line_data=agg_data[agg_data.lower().find(pack.lower())+len(pack):]
+      line_data=line_data.strip()
+      if line_data.find(no_coverage)== 0:
+         line_data=no_coverage
+      else:
+         if(line_data.find(test_cov_sum) != -1):
+            line_data=line_data[:line_data.find(test_cov_sum)] 
+         #end if(line_data.find(test_cov_sum) != -1):   
+         if (line_data.find(combine_line)!= -1):
+            line_data=line_data[line_data.find(combine_line):]
+            if (line_data.find(new_line) != -1): 
+               line_data=line_data[len(combine_line):line_data.find(new_line)]
+               if (line_data.find(cmt_sym) != -1):
+                  line_data=line_data[:line_data.find(cmt_sym)]
+               #end  if (line_data.find(cmt_sym) != -1):   
+            #end if (line_data.find(new_line) != -1):       
+         else:
+            line_data=""
+         #end f (line_data.find(combine_line)!= -1):  
+      #end if line_data.find(no_coverage)== 0:      
+   else:
+      line_data="" 
+   #end if (agg_data.lower().find(pack.lower()) != -1):   
+   
+   #return output data as null if no_coverage is found
+   if line_data =="" or line_data==no_coverage:
+      line_data=[""]
+   #check specified line exercised or not     
+   else:
+      line_data=line_data.strip()
+      #if exercised then remove star
+      if line_data[0]=='*':
+         line_data=[line_data[1:].strip(),True]
+      else:   
+          line_data=[line_data,False]  
+      #end if line_data[0]=='*':   
+   #end  if line_data =="" or line_data==no_coverage:    
+   return line_data 
+  
+#def  Get_Line_Data(agg_data,pack,pro_no,line_no):   
+
+
+
+
+def Check_Each_Line_Of_Pro_Func(agg_data,pack,proc_func_name,pro_no,data):
+   
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: this function compare each line of procedure or function and given string and reports if data is matched.
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE 
+   
+   #convert the input variables to search exact value 
+   proc_func_name=proc_func_name.lower()
+   proc_func_name=re.sub(r" ?\(\w+\)", "", proc_func_name)
+   pack=code_coverage+pack
+   combine_line="\n  "+str(pro_no)
+   line_data=""
+   data_in_lines=''
+   
+   #check that given code package present in given aggregate report.
+   if (agg_data.lower().find(pack.lower()) != -1):
+      line_data=agg_data[agg_data.lower().find(pack.lower())+len(pack):]
+      line_data=line_data.strip()
+      
+      #if coverage report of give code package showing 'No coverage' then return same 
+      if line_data.find(no_coverage)== 0:
+         line_data=no_coverage 
+         
+      else:
+         
+         #get all data (code)inside given code package 
+         if(line_data.find(test_cov_sum) != -1):
+            line_data=line_data[:line_data.find(test_cov_sum)]
+         #end if(line_data.find(test_cov_sum) != -1):   
+         
+         #find specified line
+         if (line_data.find(combine_line)!= -1):
+            line_data=line_data[line_data.find(combine_line):]
+            
+            #check end of procedures or function
+            if (line_data.lower().find('end '+proc_func_name+";") != -1):
+               line_data=line_data[:line_data.lower().find('end '+proc_func_name+";")]
+            #end if (line_data.lower().find('end '+proc_func_name+";") != -1):   
+            
+         else:
+            line_data="" 
+         #end  if (line_data.find(combine_line)!= -1):   
+      #end if line_data.find(no_coverage)== 0:     
+   else:
+      #if not found return null
+      line_data="" 
+   #end  if (agg_data.lower().find(pack.lower()) != -1):
+   
+   #compare each line with given string   
+   if (line_data != ""  and line_data != no_coverage):
+      found = False
+      data_in_lines=line_data.split('\n')
+      
+      #loop for all lines inside procedure 
+      for line in data_in_lines:
+         
+         #check specified line 
+         if (line.replace(" ","") !="" and line.replace(" ","") !="\n"):
+            
+            if len(line.split()) >= 2:
+               if (re.match('\d',line.split()[0])!= None and 
+                   re.match('\d',line.split()[1]) != None):
+                  line_with_no_space=get_only_code_text(line.replace(' ','')[len(line.split()[0]+line.split()[1]):])
+                  if (line_with_no_space.lower()==data.replace(" ","").lower()):
+                     found = True
+                     line_data=line
+                     break
+                  #end if (line.replace(" ","").lower().find(data.replace(" ","").lower())!= -1):
+               #end if (re.match('\d',line.split()[0])!= None and    
+               if line.split()[0]==str(pro_no+1):
+                  line_data=""
+                  break 
+               #end if line.split()[0]==str(pro_no+1):
+      #end for line in data_in_lines:        
+      if found == False:
+         line_data=""   
+          
+   #end if (line_data != ""  and line_data != no_coverage):        
+   return  line_data   
+#def Check_Each_Line_Of_Pro_Func(agg_data,pack,proc_func_name,pro_no,data):
+
+def _Check_For_Proc (Row_Data):
+   
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To get procedure,function and task body name in provided line 
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE    
+   """
+   Checks for a new function or procedure
+   """
+
+   proc_name = ''
+   #check for procedure
+   location = Row_Data.find('procedure')
+   len = 9
+   
+   #check for function
+   if location == -1:
+      location = Row_Data.find('function')
+      len = 8
+   #end if location == -1:
+   
+   #check for task body   
+   if location == -1:
+      location = Row_Data.find('task body')
+      len = 9   
+   #end if location == -1:   
+   
+   #If Procedure or function or task body is found in this line
+   if location != -1:
+   
+      comment_loc = Row_Data.find("--")
+      # verify it is not a comment
+      if comment_loc == -1 or comment_loc > location:
+   
+         #add procedure len + 1 space
+         location += len + 1
+         
+         temp_text = Row_Data[location:]
+         proc_name = temp_text.split(' ')[0]
+         
+         #remove any semicolons or paranthesis
+         if (proc_name[-1] == ";" or proc_name[-1] == "(" 
+             or proc_name[-1] == "\n" or proc_name[-1] == "\t"):
+            proc_name = proc_name[:-1]
+            proc_name = proc_name.replace("\r","")
+         #end if (proc_name[-1] == ";" or proc_name[-1] == "(" 
+
+      #end if comment_loc == -1 or comment_loc > location:
+   
+   #end if location
+   
+   return proc_name
+   
+#end def _Check_For_Proc (Row_Data):
+
+def _Compile_File_List(File):
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To get code packages and path name form csv file 
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE    
+   
+   #Setup file for CSV read
+   modified_file = open(File, 'rb')
+   modified_reader = csv.reader(modified_file)
+   
+   #initialize list
+   file_list = []
+   
+   #Loop through all of the CSV file
+   for row in modified_reader:
+      
+      #The package name is in the 2nd column
+      file_list.append([row[0],row[1]])
+   #end for
+   
+   modified_file.close()
+   
+   return file_list
+
+#end def _Compile_File_List
+
+def get_only_code_text(code_line):
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To remove extra symbols, new line in provided line.
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE 
+   
+   code= code_line.strip()
+   if code[0]=="*":
+      code=code[1:]
+      code = code.strip()
+   #end if code[0]=="*":   
+   comment_found= code.find('--')  
+   if (comment_found != -1):
+      code=code[:comment_found]
+   #end  if (comment_found != -1):   
+   code=code.replace("\n",'')
+   code=code.replace("\r",'')   
+   return code
+
+#def get_only_code_text(code_line):
+
+
+def _Check_For_Exci_Or_Not(code_package_is,new_prc_func_name,new_code_at_line,proce_no,new_line_no,
+                           prev_code_pack_dic,prev_aggr_html_data):
+   
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: to check the given line of code Exercised in previous aggregate report or not.
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE
+   
+   prev_data=[]
+   prev_pro_func_arry=""
+   prev_pro_func_index=None
+   
+   #check particular code package and procedure found in previous aggregate report
+   try:
+      prev_pro_func_arry = prev_code_pack_dic[code_package_is]
+      prev_pro_func_index=prev_pro_func_arry.index(new_prc_func_name)
+   except:
+      prev_data=["Not Found","N/A"]
+   #end try:   
+   
+   #if particular code package and procedure found
+   if(prev_pro_func_index !=None):
+      
+      #get specific line data in previous aggregate report
+      prev_line_data = Get_Line_Data(prev_aggr_html_data,code_package_is,prev_pro_func_index+1,new_line_no)
+      
+      if(prev_line_data[0] != ""):
+         
+         if prev_line_data[1]:
+            # if line exercised in previous aggregate report
+            if ((new_code_at_line.replace(" ","")).lower() == (prev_line_data[0].replace(" ","")).lower()):
+               prev_data=[prev_pro_func_index+1,new_line_no]
+            else:
+               prev_data=[prev_pro_func_index+1,"Code Not Matching"]
+            #end if ((new_code_at_line.replace(" ","")).lower() == (prev_line_data[0].replace(" ","")).lower()):   
+            
+         else:
+            # if line not exercised in previous aggregate report
+            if ((new_code_at_line.replace(" ","")).lower() == (prev_line_data[0].replace(" ","")).lower()):
+               prev_data=[prev_pro_func_index+1,"Not Exercised"]
+            else:
+               prev_data=[prev_pro_func_index+1,"Code Not Matching"]
+           #end if ((new_code_at_line.replace(" ","")).lower() == (prev_line_data[0].replace(" ","")).lower()):
+               
+         #end if prev_line_data[1]:      
+      else: 
+         prev_data=[prev_pro_func_index+1,"Code Not Found"]  
+      #end if(prev_line_data[0] != ""):  
+            
+   #end if(prev_pro_func_index !=None):      
+   return prev_data    
+    
+ #end def _Check_For_Exci_Or_Not(code_package_is,new_prc_func_name,new_code_at_line,proce_no,new_line_no,  
+ 
+    
