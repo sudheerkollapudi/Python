@@ -1,0 +1,146 @@
+
+
+#FILE NAME: previously_exercised_but_now_not.py
+
+#AUTHOR: Sudheer Kollapudi
+
+
+
+#PURPOSE: This script is used to get the lines of code which are previously exercised but not in new reports.
+
+
+
+import os
+import csv
+import urllib
+import re
+import sca_utilities
+red="color:#FF0000;"
+
+code_coverage="Code Coverage for Unit: "
+cmt_sym="--"
+
+def Get_Previously_Exercised_But_Not_Now_Code(previous_aggregate_reports_and_respect_head_names,#(Input) Dictionary
+                                             new_aggregate_html_file_path,#(Input)
+                                             previously_exercised_but_not_now_csv_file_path):#(Output)
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: This script is used to get the lines of code, which are previously exercised but not in new reports.
+#previous_aggregate_reports_and_respect_head_names: provide previous aggregate reposts and respect head_names in dictionary format
+#                                                   like{"A3-2_csv_file_path":'A3-2',
+#                                                         "A3-1_csv_file_path":'A3-',
+#                                                          "A2_csv_file_path":'A2'}
+#new_aggregate_html_file_path:provide new aggregate html file path
+#previously_exercised_but_not_now_csv_file_path:provide output csv file path to store previously exercised but not now code.
+
+
+#LIMITATIONS: None
+
+#NOTES: None  
+
+# ALGORITHM AND CODE
+
+   #check file type:
+   sca_utilities.check_file_type(previously_exercised_but_not_now_csv_file_path,'.csv')
+   sca_utilities.check_file_type(new_aggregate_html_file_path,'.html')
+   
+   #variable to hold the previously exercised but not now data
+   prev_exci_but_not_now = []
+   
+   #to get all packages,function and procedures in aggregate report     
+   new_code_pack_dic=sca_utilities.get_packages_and_procedures_present_in_html_path(new_aggregate_html_file_path)
+   new_aggr_html_data=sca_utilities.get_file_data_in_lines(new_aggregate_html_file_path)
+   
+   #variable to hold the previously aggregate report procedure dictionary and text data
+   prev_code_pack_dic=[]
+   prev_agg_data=[]
+   
+    #variable to hold header of html file
+   temp_data=[]
+   temp_data.append('Code Package Name')
+   temp_data.append('Procedure_Name')
+   temp_data.append('Procedure_Number_In_New_Aggregate_Report')
+   temp_data.append('Line_Number_In_New_Aggregate_Report')
+   
+   #loop for all provided previous aggregate reports
+   for file_path in previous_aggregate_reports_and_respect_head_names:
+      #updated the head names
+      data= "Procedure_Number_In_Previous_Aggregate_Report_"+previous_aggregate_reports_and_respect_head_names[file_path]
+      temp_data.append(data)
+      data= "Line_Number_In_Previous_Aggregate_Report_"+previous_aggregate_reports_and_respect_head_names[file_path]
+      temp_data.append(data)
+      
+      #append previous aggregate reports procedure dictionary and aggregate data
+      prev_code_pack_dic.append(sca_utilities.get_packages_and_procedures_present_in_html_path(file_path))
+      prev_agg_data.append(sca_utilities.convert_html_to_text(file_path))
+      
+   #end for file_path in previous_aggregate_reports_and_respect_head_names: 
+   
+   #append header of output csv file  
+   prev_exci_but_not_now.append(temp_data)
+   
+   #loop for each line in aggregate report        
+   for html_data in new_aggr_html_data:
+      
+      line_data=  re.sub('&gt;', '>', re.sub('&lt;', '<', re.sub("&nbsp;",' ',re.sub('<[^>]+>', ' ',html_data)))) 
+      #check package found
+      code_pac_name_fund = line_data.lower().find(code_coverage.lower())
+      #set split data
+      splited_line_data = line_data.split()
+      
+      #if check package found then get name of package
+      if (code_pac_name_fund != -1):
+         code_package_is = line_data[code_pac_name_fund+len(code_coverage):]
+         while True:
+            found_True = code_package_is.find(code_coverage)
+            if found_True == -1:
+               break
+            else:
+               code_package_is=code_package_is[found_True+len(code_coverage):]       
+           #end if found_True == -1:      
+         #end while True:     
+         code_package_is = (code_package_is.split()[0])
+      #end if (code_pac_name_fund != -1):
+      
+      #if code line is not exercised
+      if (code_package_is != "" and html_data.find(red)!= -1):
+         
+         #get code of specific line 
+         data_start = line_data.find(splited_line_data[2])
+         data_end = line_data.find(cmt_sym)
+         code_at_line=""
+         if (data_end == -1):
+            code_at_line=line_data[data_start:]
+         else:
+            code_at_line=line_data[data_start:data_end] 
+         #end if (data_end == -1):   
+         
+         #get procedure name
+         new_prc_func_name =  new_code_pack_dic[code_package_is][int(splited_line_data[0])-1]
+         
+         #temp list to store the data for one iteration
+         temp_data=[]
+         temp_data.append(code_package_is)
+         temp_data.append(new_prc_func_name)
+         temp_data.append(splited_line_data[0])
+         temp_data.append(splited_line_data[1])
+         
+         #check not exercised code line in previous aggregate report
+         for prev_aggr in range(0,len(prev_agg_data)):
+            prev_data = sca_utilities._Check_For_Exci_Or_Not(code_package_is,new_prc_func_name,code_at_line,splited_line_data[0],
+                                               splited_line_data[1],prev_code_pack_dic[prev_aggr],
+                                               prev_agg_data[prev_aggr])
+            temp_data.append(prev_data[0])
+            temp_data.append(prev_data[1])
+         #end for prev_aggr in range(0,len(prev_agg_data)): 
+           
+         prev_exci_but_not_now.append(temp_data) 
+         
+      #end  if (code_package_is != "" and re.match("(\d)",splited_line_data[0]) != None       
+        
+   #end for line_data in new_aggr_html_data:
+   sca_utilities.write_csv_data(previously_exercised_but_not_now_csv_file_path,prev_exci_but_not_now)    
+   
+#end def Get_Previously_Exercised_But_Not_Now_Code(previous_aggregate_reports_and_respect_head_names,#(
+   
