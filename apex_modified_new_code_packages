@@ -1,0 +1,296 @@
+
+
+#FILE NAME: apex_modified_new_code_packages.py
+
+#AUTHOR: Sudheer Kollapudi
+
+
+
+#PURPOSE: To get new and modified procedures and function from apex difference files.
+               
+
+
+import os
+import sca_utilities
+import re
+
+add_rem_len= 4
+new_line = "\n"
+comma=","
+ada_extn = ".2.ada"
+package = "package"
+len_package= len(package)
+package_body="packagebody"
+len_package_body=len(package_body)
+modi_new_code_pack = [] 
+
+
+def Find_Pro_Func_Name(line_data):
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To get the procedure or function name in provided line data.
+
+#LIMITATIONS: None
+
+#NOTES: None   
+
+# ALGORITHM AND CODE
+
+   pro_func = ""
+   line_data_split = line_data.split()
+   if 'procedure' in line_data_split[0]:
+      pro_func = [Remove_Extra_Syb(line_data_split[1]),'procedure']
+   elif 'function' in line_data_split[0]:  
+      pro_func = [Remove_Extra_Syb(line_data_split[1]),'function']
+   else:
+      pro_func = [Remove_Extra_Syb(line_data_split[2]),'task body']   
+   return pro_func   
+#end def Find_Pro_Func_Name(line_data):      
+
+def Remove_Extra_Syb(data_to_proces):
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To Remove extra symbols like '('.';' in given data 
+
+#LIMITATIONS: None
+
+#NOTES: None   
+
+# ALGORITHM AND CODE
+
+   indx = data_to_proces.find("(")
+   if indx != -1:
+      data_to_proces = data_to_proces[:indx]
+   indx = data_to_proces.find(";")   
+   if indx != -1:
+      data_to_proces = data_to_proces[:indx]
+   return data_to_proces
+#end def remove_extra_syb(data_to_proces):
+               
+def Get_New_And_Modified_Procedures(new_modified_difference_files_folder_path,#(Input)
+         new_modified_procedures_and_functions_csv_file_path):#(output)
+   
+#---------------------------------------------------------------------------------
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To get new and modified procedures and function from apex difference files.
+
+#new_modified_difference_files_folder_path: It is folder path, which contains Apex new and modified difference files.
+#new_modified_procedures_and_functions_csv_file_path:it is output .csv file, which contains Apex new and modified procedure and function.
+
+#LIMITATIONS: None
+
+#NOTES: Don't specify "/" or '\' slash at end of new_modified_difference_files_folder_path argument 
+
+#output would be
+# ----------------------------------------------------------------------------------------|-------------
+# Code_Package       |  Function_Procedure_Name                 |  Function_Procedure_Type|Modified/New
+# -------------------|------------------------------------------|------------------------ |------------- 
+# a661_manager.2.ada |  Log_Error                               |  procedure              |Modified
+# -------------------|------------------------------------------|-------------------------|--------------
+# a661_manager.2.ada |  Update_Bezel_Suppression_Counter        |  procedure              | Modified
+# -------------------|------------------------------------------|-------------------------|--------------
+# a661_manager.2.ada |  Client_Processing_Enabled               |  function               | Modified
+# -------------------|------------------------------------------|-------------------------|----------------  
+
+# ALGORITHM AND CODE
+
+   global modi_new_code_pack
+   
+   #check file type
+   sca_utilities.check_file_type(new_modified_procedures_and_functions_csv_file_path,'.csv')
+   
+   for file_name in os.listdir(new_modified_difference_files_folder_path):
+      
+      # if file is modified file 
+      if (file_name[-9:]=="_diff.txt"):
+         
+         #read data from modified difference file 
+         modi_difference_file_data_in_string=sca_utilities.get_file_data_as_string(os.path.join(new_modified_difference_files_folder_path,file_name))
+        
+         #if file not encountered with No differences then treat file as difference file
+         if 'No differences encountered' not in modi_difference_file_data_in_string:
+            #read data from modified difference file 
+            modi_difference_file_data=sca_utilities.get_file_data_in_lines(os.path.join(new_modified_difference_files_folder_path,file_name))
+            length_of_file= len(modi_difference_file_data)
+            
+            #variables to hold procedures and function names and starting and ending lines of a file
+            line_no =0
+            start_pros_funcs = []
+            end_pros_funcs = []
+            pros_funcs_removed = ""
+            modi_line_nos = []
+            packages= ""
+            pro_func_found_at=[]
+            is_pros_or_funcs=[]
+            # process modified diff file data
+            while (line_no < length_of_file):
+               
+               #line data without any space
+               line_data=modi_difference_file_data[line_no]
+               data_with_no_space= line_data[add_rem_len:].replace(" ","")
+               
+               #list which contains line data by splitting the data with reference of space 
+               split_data=line_data[add_rem_len:].split()
+               
+               if (data_with_no_space != "\n"):
+                  
+                  #get 'package' or 'package body' names (which would be useful while checking end of procedures and function). 
+                  if(package_body in data_with_no_space[:len_package_body]): 
+                     packages +=" "+split_data[2]
+                  elif(package in data_with_no_space[:len_package]):
+                     packages +=" "+split_data[1]
+                  #end if (package in data_with_no_space[:len_package]) 
+                  
+                  #get modified line numbers(which would be use full while checking modified procedure)
+                  if ((re.match("([+|])|([-|])",line_data[2:4])!=None)
+                      and(re.match("(--)",data_with_no_space[:2])==None)):
+                     modi_line_nos.append(line_no)
+                  #end if ((re.match("([+|])|([-|])",line_data[2:4])!=None)
+                  
+                  #get all procedures and function of file with staring line no   
+                  if ((re.match("(procedure)|(function)|(taskbody)",data_with_no_space[:10])!=None)
+                      and (re.match("([-|])",line_data[2:4])== None)):
+                     pros_func_data=Find_Pro_Func_Name(line_data[add_rem_len:])
+                     if (pros_func_data != ""):
+                        start_pros_funcs.append(pros_func_data[0])
+                        is_pros_or_funcs.append(pros_func_data[1])
+                        pro_func_found_at.append(line_no)
+                  #end if ((re.match("(procedure)|(function)|(taskbody)",data_with_no_space[:10])!=None)
+                  
+                  #append the procedures which are removed   
+                  if ((re.match("(procedure)|(function)|(taskbody)",data_with_no_space[:10])!=None)
+                      and (re.match("([-|])",line_data[2:4])!=None)):
+                     pros_funcs_removed += " "+Find_Pro_Func_Name(modi_difference_file_data[line_no][add_rem_len:])[0]
+                  #end if ((re.match("(procedure)|(function)|(taskbody)",data_with_no_space[:10])!=None)  
+                  
+                  #get all procedures and function of file with ending line no      
+                  if ((re.match("(endif)|(endrecord)|(endloop)|(endcase)|(end;)",data_with_no_space[:9])== None)
+                      and(re.match("(end)",data_with_no_space[:3]) !=None)
+                      and(" "+data_with_no_space[3:data_with_no_space.find(";")].lower()+" " not in packages.lower()+" ")): 
+                      end_pros_funcs = (data_with_no_space[3:data_with_no_space.find(";")]).strip()
+                      #if end procedure name found in starting of procedure list
+                      if end_pros_funcs in start_pros_funcs:
+                         list_index = start_pros_funcs.index(end_pros_funcs)
+                         starting_point=pro_func_found_at[list_index]
+                         
+                         #check if any line in between procedure stating and ending is modified
+                         is_pro_func_modi = False
+                         line_range = range(starting_point,line_no+1)
+                         for modi_line in modi_line_nos:
+                            if modi_line in line_range:
+                               is_pro_func_modi = True 
+                               break
+                            #end if modi_line in line_range:
+                         #end for modi_line in modi_line_nos:   
+                         
+                         #if any line modified with in the  procedure    
+                         if is_pro_func_modi:
+                            modi_new_code_pack.append(file_name[:-9]+ada_extn+','+end_pros_funcs+','+is_pros_or_funcs[list_index]+','+"Modified"+','+new_line)
+                      
+                      #check whether procedure is removed or not
+                      elif " "+end_pros_funcs+" " in pros_funcs_removed+" ":
+                          print end_pros_funcs + " has been removed in " + file_name +new_line
+                      #if not found then print below message, Note:(normal this condition will hit for 'end task_names')    
+                      else:    
+                           print "check:\n" + end_pros_funcs+ " line no " + str(line_no+1)+ " file name " + file_name+new_line
+                      #end if end_pros_funcs in start_pros_funcs:     
+                  #end if ((re.match("(endif)|(endrecord)|(endloop)|(endcase)|(end;)"  
+                                                     
+               line_no +=1
+            #end while (line_no < length_of_file):
+         
+         
+         else:
+            #if file encountered with No differences then treat file as new file
+            Get_New_Procedures(new_modified_difference_files_folder_path,file_name,file_name[:-9]+ada_extn)
+            
+         #if (len(end_pro_func)!=0):
+      elif(file_name[-8:]=="_new.txt"):
+         # if file is new then call Get_New_Procedures to get all procedures and function
+         Get_New_Procedures(new_modified_difference_files_folder_path,file_name,file_name[:-8]+ada_extn)
+         
+      #end if (file_name[-9:]=="_diff.txt"):
+   #for file_name in os.listdir(new_modified_difference_files_folder_path):   
+   print "writing output data"
+   modi_new_code_pack=list(set(modi_new_code_pack))
+   csv_file = open(new_modified_procedures_and_functions_csv_file_path, 'wb')
+   csv_file.write("Code_Package,Function_Procedure_Name,Function_Procedure_Type,Modified/New,"+new_line)
+   for data in modi_new_code_pack:
+      csv_file.write(data)
+   csv_file.close() 
+#end Get_New_And_Modified_Procedures(new_modi_diff_files_path,
+
+def Get_New_Procedures(new_modi_diff_files_path,file_name,ada_file_name):
+   
+#---------------------------------------------------------------------------------
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: To get new procedures and function from apex new difference files.
+
+#LIMITATIONS: None
+
+#NOTES: None
+
+# ALGORITHM AND CODE
+   
+   #read data from text file
+   new_difference_file_data=sca_utilities.get_file_data_in_lines(os.path.join(new_modi_diff_files_path,file_name))
+   length_of_file= len(new_difference_file_data)
+   
+   #variables to hold procedures and function names
+   line_no =0
+   pros_funcs = []
+   end_pro_func = ""
+   packages=" "
+   is_pros_or_funcs=[]
+   
+   #process file data
+   while (line_no < length_of_file):
+      
+      line_data=new_difference_file_data[line_no]
+      
+      #line data without any space
+      data_with_no_space= line_data.replace(" ","")
+      #list which contains line data by splitting the data with reference of space 
+      
+      split_data=line_data.split()
+      
+      #get 'package' or 'package body' names (which would be useful while checking end of procedures and function). 
+      if(package_body in data_with_no_space[:len_package_body]): 
+         packages +=" "+split_data[2]
+      elif(package in data_with_no_space[:len_package]):
+         packages +=" "+split_data[1]
+      #end if (package in data_with_no_space[:len_package])
+      
+      #get the procedure name at stating of procedure definition  
+      if (re.match("(procedure)|(function)|(taskbody)",data_with_no_space[:10])!=None):
+         pro_func_data =Find_Pro_Func_Name(line_data)
+         if pro_func_data != "":
+            pros_funcs.append(pro_func_data[0])
+            is_pros_or_funcs.append(pro_func_data[1])
+            
+      #end if (re.match("(procedure)|(function)|(taskbody)",data_with_no_space[:10])!=None):
+      
+      #get the procedure name at end of procedure definition  
+      if ((re.match("(endif)|(endrecord)|(endloop)|(endcase)|(end;)",data_with_no_space[:9])== None)
+          and(re.match("(end)",data_with_no_space[:3]) !=None)
+          and(" "+data_with_no_space[3:data_with_no_space.find(";")].lower()+" " not in packages.lower()+" ")): 
+         end_pros_funcs = data_with_no_space[3:data_with_no_space.find(";")]
+         
+         
+         #both procedures names at end and starting of procedure definition is same then store the data
+         if end_pros_funcs in pros_funcs:
+            list_index = pros_funcs.index(end_pros_funcs)
+            modi_new_code_pack.append(ada_file_name+','+end_pros_funcs+','+is_pros_or_funcs[list_index]+','+"New"+','+new_line)
+         else:    
+            print "check:\n" + end_pros_funcs+ " line no " + str(line_no+1)+ " file name " + file_name+new_line
+         #end  if end_pros_funcs in pros_funcs:
+          
+      #end if ((re.match("(endif)|(endrecord)|(endloop)|(endcase)|(  
+      line_no +=1    
+   #end while (line_no < length_of_file):
+   
+#end Get_New_Procedures(new_modi_diff_files_path,file_name,ada_file_name):         
