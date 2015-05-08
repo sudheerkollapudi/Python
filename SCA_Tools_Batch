@@ -1,0 +1,166 @@
+
+#FILE NAME: SCA_Tools_Batch.py
+
+#AUTHOR: Sudheer Kollapudi
+
+
+
+#PURPOSE: This script is used to run all scripts in a batch.
+
+
+import apex_modified_new_code_packages
+import aggregate_modified_but_not_exercised
+import Extract_Excluded_Code
+import map_a3_entries
+import sca_metrics
+import previously_exercised_but_now_not
+import check_code_exercised_in_other_apps
+import consolidate_report
+import modify_aggregate_report
+import input_data
+
+def Run_Sca_Tool():
+   
+   #get all user input paths from input_data file
+   arguments_for=input_data.Arguments()
+   #variable to monitor script execution 
+   monitor_data=""
+   #execute apex_modified_new_code_packages script 
+   try:
+      arguments=arguments_for._apex_modified_new_code_packages()
+      apex_modified_new_code_packages.Get_New_And_Modified_Procedures(arguments[0],
+                                                                      arguments[1])
+      monitor_data+='apex_modified_new_code_packages.Get_New_And_Modified_Procedures() was successfully executed \n'
+   except:   
+      monitor_data+='apex_modified_new_code_packages.Get_New_And_Modified_Procedures() script was crashed \n'
+   
+   #execute aggregate_modified_but_not_exercised script 
+   try:
+      arguments=arguments_for._aggregate_modified_but_not_exercised()
+      aggregate_modified_but_not_exercised.Is_Procedure_Used(arguments[0],
+                                                            arguments[1],
+                                                            arguments[2],
+                                                            arguments[3])
+      monitor_data+='aggregate_modified_but_not_exercised.Is_Procedure_Used() was successfully executed \n'
+   except:   
+      monitor_data+='aggregate_modified_but_not_exercised.Is_Procedure_Used() script was crashed \n'   
+   
+   #execute Extract_Excluded_Code script (to map the data)
+   try:
+      arguments=arguments_for._extract_excluded_code_1()
+      Extract_Excluded_Code.Extract_Data_From_Xls(arguments[0],
+                                                  arguments[1],
+                                                  arguments[2],
+                                                  arguments[3],
+                                                  arguments[4],
+                                                  arguments[5])
+      monitor_data+='Extract_Excluded_Code.Extract_Data_From_Xls()(to map the data) was successfully executed \n'
+   except:   
+      monitor_data+='Extract_Excluded_Code.Extract_Data_From_Xls()(to map the data) script was crashed \n'      
+      
+   #execute Extract_Excluded_Code script (with Exclusion Reason)
+   try:
+      arguments=arguments_for._extract_excluded_code_2()
+      Extract_Excluded_Code.Extract_Data_From_Xls(arguments[0],
+                                                  arguments[1],
+                                                  arguments[2],
+                                                  arguments[3],
+                                                  arguments[4],
+                                                  arguments[5])
+      monitor_data+='Extract_Excluded_Code.Extract_Data_From_Xls()(with Exclusion Reason) was successfully executed \n'
+   except:   
+      monitor_data+='Extract_Excluded_Code.Extract_Data_From_Xls()(with Exclusion Reason) script was crashed \n'      
+      
+      
+      
+   #execute map_a3_entries script (with Exclusion Reason)
+   try:
+      arguments=arguments_for._map_a3_entries()
+      map_a3_entries.Map_Previous_Data_With_New_Aggregate_Report(arguments[0],
+                                                                 arguments[1],
+                                                                 arguments[2],
+                                                                 arguments[3],
+                                                                 arguments[4])
+      monitor_data+='map_a3_entries.Map_Previous_Data_With_New_Aggregate_Report() was successfully executed \n'
+   except:   
+      monitor_data+='map_a3_entries.Map_Previous_Data_With_New_Aggregate_Report() script was crashed \n'    
+      
+    
+    #execute sca_metrics script
+   try:
+      arguments=arguments_for._sca_metrics()
+      sca_metrics.Process_HTML_File(arguments[0],
+                                    arguments[1],
+                                    arguments[2],
+                                    arguments[3],
+                                    arguments[4],
+                                    arguments[5],
+                                    arguments[6],
+                                    arguments[7],
+                                    arguments[8])
+      monitor_data+='sca_metrics.Process_HTML_File() was successfully executed \n'
+   except:   
+      monitor_data+='sca_metrics.Process_HTML_File() script was crashed \n'    
+      
+      
+      
+      
+   #execute previously_exercised_but_now_not script
+   try:
+      arguments=arguments_for._previously_exercised_but_now_not()
+      previously_exercised_but_now_not.Get_Previously_Exercised_But_Not_Now_Code(arguments[0],
+                                                                                 arguments[1],
+                                                                                 arguments[2])
+      monitor_data+='previously_exercised_but_now_not.Get_Previously_Exercised_But_Not_Now_Code() was successfully executed \n'
+   except:   
+      monitor_data+='previously_exercised_but_now_not.Get_Previously_Exercised_But_Not_Now_Code() script was crashed \n'      
+      
+         
+      
+   #execute modify_aggregate_report script
+   try:
+      arguments=arguments_for._modify_aggregate_report()
+      modify_aggregate_report.Process_HTML_File(arguments[0],
+                                                arguments[1],
+                                                arguments[2],
+                                                arguments[3],
+                                                arguments[5])
+      monitor_data+='modify_aggregate_report.Process_HTML_File() was successfully executed \n'
+   except:   
+      monitor_data+='modify_aggregate_report.Process_HTML_File() script was crashed \n' 
+           
+      
+   #execute consolidate_report script
+   try:
+      arguments=arguments_for._consolidate_report()
+      consolidate_report.Process_HTML_File(arguments[0],
+                                           arguments[1],
+                                           arguments[2],
+                                           arguments[3],
+                                           arguments[4],
+                                           arguments[5],
+                                           arguments[6])
+      monitor_data+='consolidate_report.Process_HTML_File() was successfully executed \n'
+   except:   
+      monitor_data+='consolidate_report.Process_HTML_File() script was crashed \n'       
+      
+      
+  #execute check_code_exercised_in_other_apps script
+   try:
+      arguments=arguments_for._check_code_exercised_in_other_apps()
+      check_code_exercised_in_other_apps.Check_Code_In_Other_Apps(arguments[0],
+                                                                  arguments[1],
+                                                                  arguments[2],
+                                                                  arguments[3])
+      monitor_data+='check_code_exercised_in_other_apps.Check_Code_In_Other_Apps() was successfully executed \n'
+   except:   
+      monitor_data+='check_code_exercised_in_other_apps.Check_Code_In_Other_Apps() script was crashed \n'  
+   
+   print '\n' 
+   print '-------------------------------------------------' 
+   print monitor_data
+   print '-------------------------------------------------' 
+   
+#end def Run_Sca_Tool():
+   
+      
