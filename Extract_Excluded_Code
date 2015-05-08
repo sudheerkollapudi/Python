@@ -1,0 +1,326 @@
+
+
+#FILE NAME: Extract_Excluded_Code.py
+
+#AUTHOR: Sudheer Kollapudi
+
+
+#PURPOSE: this script can be used in two purposes.
+#         1. To extract the data from previous analysis.
+#         2. To extract the data from previous analysis with standardized reason
+#            (will update the reason by looking into the comments other columns).
+
+#         Note:This script is specifically designed to extract the data form A3 analysis(.xls
+#              sheets) of CH53K program. we can use this script for other programs by doing small
+#              script updates.  
+
+#       .if script is running to extract the data from previous analysis without standardized exclusion reason
+        
+         # Then specify xls_files_sheet_columns should be:
+         # [0,1,2,3,4]
+         # 0: Code Package
+         # 1: Subprogram Number
+         # 2: Beginning Report Line
+         # 3: Ending Report Line
+         # 4: Coverage
+         
+         #if script is running to extract the data with standardized exclusion reason.
+         # Then specify xls_files_sheet_columns should be:
+         # [0,1,2,3,4,5,6,7,8…..]
+         # 0: Code Package
+         # 1: Subprogram Number
+         # 2: Beginning Report Line
+         # 3: Ending Report Line
+         # 5,6,7,8…..: reference columns to get standardized exclusion reason
+         
+
+
+import csv
+import re
+import xlrd
+import sca_utilities
+
+#Apex Pretty Print
+pretty_print="prettyprint"
+
+#Coding Standards
+coding_standards="codingstandards"
+
+#Product Line Code
+code_modi_add_to_other_prg="codewasmodified/addedbyanotherprogram"
+
+#Defensive Code
+defensive="defensive"
+error_log_code="errorlogcode"
+
+#Code Inspection
+inspection="inspection"
+test_page="testpage"
+not_configured="notconfigured"
+
+#Code Not Modified
+not_modified="notmodified"
+debugcode="debugcode"
+debug="debug"
+hitdebug="hitdebug"
+no_func_change="nofunctionalchange"
+
+#Code Removal Candidate
+cr_to_remove="crtoremove"
+codecr="codecr"
+remove="remove"
+deadcode="deadcode"
+code_removal_cr="coderemovalcR"
+sloc_not_covered="slocisnotcovered"
+
+#Deactivated Code
+deactivated="deactivated"
+not_acti="notactivated"
+not_raised="notraised"
+not_supp="notsupported"
+not_being_executed="notbeingexecuted"
+
+code_coverage="Code Coverage for Unit: "
+new_line="\n"
+comma=","
+cmt_sym="--"
+test_cov_sum="TEST COVERAGE SUMMARY"
+space=" "
+
+#column Ids using for CH53K
+#code_new_for_ch53k_column_ids=[1,3,4,5,8,9,11,14]
+#code_mod_for_ch53k_column_ids=[1,3,4,5,8,9,11,14]
+#code_not_mod_for_ch53k_column_ids=[1,3,4,5]
+#set_4_column_ids=[2,3,4,5,17,18,19]
+#set_4_new_column_ids=[2,3,4,5,17,18,19]
+
+def Extract_Data_From_Xls(xls_files_paths,#(Input) provide files paths in one dimensional array. 
+         xls_files_sheet_names,#(Input) provide xls files sheet names in two dimensional array.
+         xls_files_sheet_columns,#(Input) provide xls files sheet columns (from which you want to extract the data) in three dimensional array.
+         extract_data_with_exclusion_reason,#(Input) True if script is running to extract the data with standardized exclusion reason.
+                                            #        False if script is running to extract the data from previous analysis without standardized exclusion reason.
+         prev_aggr_html_file_path,#(Input)provide previous aggregate report html path if extract_data_with_exclusion_reason is True.
+                                  # provide None if extract_data_with_exclusion_reason is False.
+         extracted_data_csv_file_path):#(Output)
+ 
+
+
+#---------------------------------------------------------------   
+#FUNCTIONAL DESCRIPTION:
+
+#PURPOSE: this script can be used in two purposes.
+#         1. To extract the data from previous analysis.
+#         2. To extract the data from previous analysis with standardized reason
+#            (will update the reason by looking into the comments other columns).
+
+#xls_files_paths: provide the xls files paths(from which you want to extract the data)
+#                 in one dimensional array like ["fullpath-1","fullpath-2"].
+#xls_files_sheet_names: provide sheet names inside xls file in two dimensional array like[["Set #4","Set #4_New"]]
+#xls_files_sheet_columns: provide sheet columns inside xls file in three dimensional array like[[[2,3,4,5,17,18,19],[2,3,4,5,17,18,19]]]
+#extract_data_with_exclusion_reason:False if script is running to extract the data from previous analysis without standardized exclusion reason.
+#                                    True if script is running to extract the data with standardized exclusion reason.
+#prev_aggr_html_path: None if script is running to extract the data from previous analysis without standardized exclusion reason.
+#extracted_data_csv_file_path:out put csv file which holds the extracted data
+
+#LIMITATIONS: None
+
+#NOTES: 
+#       1. input excel file should be saved as ".xls" not ".xlsx" 
+#       2.if script is running to extract the data from previous analysis without standardized exclusion reason
+        
+         # Then specify xls_files_sheet_columns should be:
+         # [0,1,2,3,4]
+         # 0: Code Package
+         # 1: Subprogram Number
+         # 2: Beginning Report Line
+         # 3: Ending Report Line
+         # 4: Coverage
+         
+         #if script is running to extract the data with standardized exclusion reason.
+         # Then specify xls_files_sheet_columns should be:
+         # [0,1,2,3,4,5,6,7,8…..]
+         # 0: Code Package
+         # 1: Subprogram Number
+         # 2: Beginning Report Line
+         # 3: Ending Report Line
+         # 5,6,7,8…..: reference columns to get standardized exclusion reason
+
+
+# ALGORITHM AND CODE  
+
+   #check file type
+   if (prev_aggr_html_file_path != None):
+      sca_utilities.check_file_type(prev_aggr_html_file_path,'.html') 
+   sca_utilities.check_file_type(extracted_data_csv_file_path,'.csv')
+   
+   #to hold the extracted data(which contains duplicate entries also)
+   buf_csv_data=[]
+   
+   #loop for all provided xls files 
+   for file_path_id in range(0,len(xls_files_paths)):
+      #check file type
+      sca_utilities.check_file_type(xls_files_paths[file_path_id],'.xls')
+      workbook = xlrd.open_workbook(xls_files_paths[file_path_id])
+      
+      #loop for all provided sheets inside xls files
+      for sheet_id in range(0,len(xls_files_sheet_names[file_path_id])):
+         worksheet = workbook.sheet_by_name(xls_files_sheet_names[file_path_id][sheet_id])
+         
+         #loop for all rows of specific sheet 
+         for row in range(1,worksheet.nrows):
+            
+            #if extract data not required standard exclusion reason
+            if (extract_data_with_exclusion_reason == False):
+               
+               #exclude if coverage columns contains any one of the following
+               rem_hitdbg=worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][4])
+               if (rem_hitdbg.lower().replace(' ','').find("hitdebug") == -1 
+                   and rem_hitdbg.lower().replace(' ','').find("ignore")== -1
+                   and rem_hitdbg.lower().replace(' ','').find("target")== -1
+                   and rem_hitdbg != ""):
+                  data= ''
+                  #append the data
+                  for column in range(0,5):
+                     data = data+str(worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][column]))+comma
+                  buf_csv_data.append(data)
+                  #for column in range(0,5):
+               #if (rem_hitdbg.lower().replace(' ','').find("hitdebug") == -1    
+            
+            #extract the data with standard exclusion reason   
+            else:
+               #get code package and procedure no and line no
+               package=worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][0])
+               func_pro=worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][1])
+               start_no=worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][2])
+               end_no=worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][3])
+               data_to_find_inspe_def_line=""
+               standardized_reason=""
+               
+               #get the data form 4,5,6 columns to set standardized exclusion reason if sheet name is any one of "Set #4","Set #4_New".
+               #Note: for ch53k we are getting analysis comments from 4,5,6 columns and updating standardized exclusion reason if any
+               #key word present in those comments.   
+               if (xls_files_sheet_names[file_path_id][sheet_id] == "Set #4" or 
+                   xls_files_sheet_names[file_path_id][sheet_id] == "Set #4_New"):
+                  data1=(worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][4]).replace("\n",""))
+                  data2=(worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][5]).replace("\n",""))
+                  data3=(worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][6]).replace("\n",""))
+                  data_to_find_inspe_def_line=data1+space+data2+space+data3
+               else:
+                  #get the data form 4,5,6 7,columns to set standardized exclusion reason if sheet name is any one of 'code new for ch53k'
+                  #'code modified for ch53k'
+                  #Note: for ch53k we are getting analysis comments from 4,5,6 columns and updating standardized exclusion reason if any
+                  #key word present in those comments.   
+                  data1=(worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][4]).replace("\n",""))
+                  data2=(worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][5]).replace("\n",""))
+                  data3=(worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][6]).replace("\n",""))
+                  data4=(worksheet.cell_value(rowx=row,colx=xls_files_sheet_columns[file_path_id][sheet_id][7]).replace("\n",""))    
+                  data_to_find_inspe_def_line=data1+space+data2+space+data3+space+data4
+               #end if (xls_files_sheet_names[file_path_id][sheet_id] == "Set #4" or    
+               data_to_find_inspe_def_line=(data_to_find_inspe_def_line.replace(" ","")).lower()
+               
+               #exclude rows if any one of key word present(hitdebug,ignore,target)
+               if (data_to_find_inspe_def_line.find('hitdebug') != -1 or
+                   data_to_find_inspe_def_line.find('ignore') != -1 or
+                   data_to_find_inspe_def_line.find('target') != -1):
+                  not_use=1
+               #set standardized exclusion reason as Apex Pretty Print 
+               #if any key word related to 'Apex Pretty Print' present in data_to_find_inspe_def_line
+               elif (data_to_find_inspe_def_line.find(pretty_print) != -1):
+                  standardized_reason="Apex Pretty Print"
+               #set standardized exclusion reason as 'Coding Standards' 
+               #if any key word related to 'Coding Standards' present in data_to_find_inspe_def_line   
+               elif(data_to_find_inspe_def_line.find(coding_standards) != -1):  
+                  standardized_reason="Coding Standards" 
+               #set standardized exclusion reason as 'Product Line Code' 
+               #if any key word related to 'Product Line Code' present in data_to_find_inspe_def_line   
+               elif(data_to_find_inspe_def_line.find(code_modi_add_to_other_prg) != -1):
+                  standardized_reason="Product Line Code" 
+               #set standardized exclusion reason as 'Defensive Code' 
+               #if any key word related to 'Defensive Code' present in data_to_find_inspe_def_line   
+               elif(data_to_find_inspe_def_line.find(defensive) != -1
+                    or data_to_find_inspe_def_line.find(error_log_code) != -1):
+                  standardized_reason="Defensive Code"   
+               #set standardized exclusion reason as 'Code Inspection' 
+               #if any key word related to 'Code Inspection' present in data_to_find_inspe_def_line      
+               elif(data_to_find_inspe_def_line.find(inspection) != -1
+                    or data_to_find_inspe_def_line.find(test_page) != -1
+                    or data_to_find_inspe_def_line.find(not_configured) != -1):
+                  standardized_reason="Code Inspection"  
+               #set standardized exclusion reason as 'Code Not Modified' 
+               #if any key word related to 'Code Not Modified' present in data_to_find_inspe_def_line    
+               elif(data_to_find_inspe_def_line.find(not_modified) != -1
+                    or data_to_find_inspe_def_line.find(debugcode) != -1
+                    or data_to_find_inspe_def_line.find(no_func_change) != -1
+                    or(data_to_find_inspe_def_line.find(debug) !=-1 and 
+                       data_to_find_inspe_def_line.find(hitdebug)==-1)):
+                  standardized_reason="Code Not Modified"  
+               #set standardized exclusion reason as 'Deactivated Code' 
+               #if any key word related to 'Deactivated Code' present in data_to_find_inspe_def_line       
+               elif(data_to_find_inspe_def_line.find(deactivated) != -1
+                    or data_to_find_inspe_def_line.find(not_acti) != -1
+                    or data_to_find_inspe_def_line.find(not_raised) != -1
+                    or data_to_find_inspe_def_line.find(not_supp) != -1
+                    or data_to_find_inspe_def_line.find(not_being_executed) != -1):
+                  standardized_reason="Deactivated Code" 
+               #set standardized exclusion reason as 'Code Removal Candidate' 
+               #if any key word related to 'Code Removal Candidate' present in data_to_find_inspe_def_line            
+               elif(data_to_find_inspe_def_line.find(cr_to_remove) != -1
+                    or data_to_find_inspe_def_line.find(codecr) != -1
+                    or data_to_find_inspe_def_line.find(remove) != -1
+                    or data_to_find_inspe_def_line.find(deadcode) != -1
+                    or data_to_find_inspe_def_line.find(code_removal_cr) != -1
+                    or data_to_find_inspe_def_line.find(sloc_not_covered) != -1):
+                  standardized_reason="Code Removal Candidate"      
+               #end if (data_to_find_inspe_def_line.find('hitdebug' 
+               
+               #append the data with standardized exclusion reason
+               if (standardized_reason !=""):
+                  #loop for all lines
+                  for line_no in range(int(start_no),int(end_no)+1):
+                     extr_data=package+comma+str(int(func_pro))+comma+str(line_no)+comma+standardized_reason
+                     buf_csv_data.append(extr_data)  
+                   #end for line_no in range(int(start_no),int(end_no)+1):  
+               # if (standardized_reason !=""):   
+                
+            #if (extract_data_with_exclusion_reason == False):                           
+      
+         #end  for row in range(1,worksheet.nrows):
+         
+      #end for sheet_id in range(0,len(xls_files_sheet_names[file_path_id])):   
+   #for file_path_id in range(0,len(xls_files_paths)):
+   
+   
+   #remove duplicates.   
+   buf_csv_data=list(set(buf_csv_data))   
+   prev_exclu_data=[]
+   #get line data so that we can use this data in sca_metrics.py script
+   if(extract_data_with_exclusion_reason == True):
+      prev_exclu_data.append(['Package Name','Procedure Name','Procedure Number', "Line NO","Code At Line","Standardized Reason"])  
+      prev_code_pack_dic=sca_utilities.get_packages_and_procedures_present_in_html_path(prev_aggr_html_file_path)
+      #convert html data into text data
+      txt_data=sca_utilities.convert_html_to_text(prev_aggr_html_file_path)
+      for prev_data in buf_csv_data:
+         prev_data=prev_data.split(",")
+         proc_func_name=""
+         prve_line_data=""
+         try:
+            proc_func_name= prev_code_pack_dic[prev_data[0]][int(prev_data[1])-1]
+            prve_line_data = sca_utilities.Get_Line_Data(txt_data,prev_data[0],int(float(prev_data[1])),int(float(prev_data[2])))
+            if prve_line_data[0]!="":
+               prev_exclu_data.append([prev_data[0],proc_func_name,prev_data[1],prev_data[2],prve_line_data[0],prev_data[3]])
+         except:
+            print "check " + prev_data[0] + " and " + proc_func_name + " in aggregate report \n"   
+      #for prev_data in buf_csv_data:  
+   else:
+      prev_exclu_data.append(['Package Name','Procedure Number', 'Beginning Report Line',"Ending Report Line","Coverage"])
+      for prev_data in buf_csv_data:
+         prev_data=prev_data[:-1]
+         prev_data=prev_data.split(',')
+         prev_exclu_data.append(prev_data)
+      #for prev_data in buf_csv_data   
+   #if(extract_data_with_exclusion_reason == True):   
+   
+   print "Writing output"  
+   sca_utilities.write_csv_data(extracted_data_csv_file_path,prev_exclu_data)
+
+#def Extract_Data_From_Xls(xls_files_paths,
